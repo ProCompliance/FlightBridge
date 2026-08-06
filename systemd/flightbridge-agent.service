@@ -1,0 +1,21 @@
+[Unit]
+Description=FlightBridge Drone Agent
+Documentation=https://github.com/ProCompliance/FlightBridge
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/flightbridge/agent/flightbridge-agent.py
+WorkingDirectory=/opt/flightbridge/agent
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=flightbridge-agent
+
+# Give network and Tailscale time to be ready
+ExecStartPre=/bin/sleep 10
+
+[Install]
+WantedBy=multi-user.target
