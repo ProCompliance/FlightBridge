@@ -1,0 +1,17 @@
+[Unit]
+Description=FlightBridge GCS Agent
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStartPre=/bin/sleep 10
+ExecStart=/usr/bin/python3 /opt/flightbridge/gcs/flightbridge-gcs.py
+WorkingDirectory=/opt/flightbridge/gcs
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
