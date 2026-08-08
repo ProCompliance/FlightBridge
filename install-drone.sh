@@ -5,7 +5,7 @@
 
 set -e
 
-BACKEND_URL="http://172.29.114.77:8000"
+BACKEND_URL="http://192.168.42.8:8000"
 PROVISIONING_SECRET="flightbridge_dev_secret"
 STATE_FILE="/etc/flightbridge/state.conf"
 LOG_FILE="/var/log/flightbridge-install.log"
