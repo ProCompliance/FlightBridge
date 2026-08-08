@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from config import PROVISIONING_SECRET, PAIRING_CODE_EXPIRY
-from tailscale_api import mint_auth_key, get_drone_ip
+from tailscale_api import mint_auth_key, mint_gcs_auth_key, get_drone_ip
 from pairing_store import (
     generate_pairing_code,
     store_pairing_code,
@@ -70,7 +70,7 @@ def provision(req: ProvisionRequest):
 
     # Mint a single-use Tailscale auth key
     try:
-        auth_key = mint_auth_key()
+        auth_key = mint_gcs_auth_key() if req.device_id.startswith("gcs-") else mint_auth_key()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to mint auth key: {str(e)}")
 
