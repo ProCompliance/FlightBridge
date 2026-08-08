@@ -74,9 +74,7 @@ fi
 success "Tailscale IP: $DRONE_IP"
 
 log "Registering with backend..."
-curl -sf -X POST "$BACKEND_URL/register" \
-    -H "Content-Type: application/json" \
-    -d "{\"device_id\":\"$DEVICE_ID\",\"drone_ip\":\"$DRONE_IP\",\"secret\":\"$PROVISIONING_SECRET\"}" || warn "Registration failed, pairing code may not resolve"
+curl -sf -X POST "$BACKEND_URL/register?device_id=$DEVICE_ID&drone_ip=$DRONE_IP&secret=$PROVISIONING_SECRET" || warn "Registration failed, pairing code may not resolve"
 
 cat > "$STATE_FILE" << STATE
 VPN_SET=true
