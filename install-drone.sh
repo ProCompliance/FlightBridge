@@ -1,8 +1,5 @@
 #!/bin/bash
 # FlightBridge Drone Installer
-# Provisions a unique Tailscale identity and displays a pairing code.
-# No user configuration required beyond running this script.
-
 set -e
 
 BACKEND_URL="http://192.168.42.8:8000"
@@ -10,7 +7,6 @@ PROVISIONING_SECRET="flightbridge_dev_secret"
 STATE_FILE="/etc/flightbridge/state.conf"
 LOG_FILE="/var/log/flightbridge-install.log"
 
-# Colours for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -27,36 +23,77 @@ echo "  FlightBridge Drone Installer"
 echo "================================================"
 echo ""
 
-# Must run as root
 if [ "$EUID" -ne 0 ]; then
     error "Please run as root: sudo bash install-drone.sh"
 fi
 
-# Create directories
 mkdir -p /etc/flightbridge
 mkdir -p /var/log
 
-# --- Step 1: Check if already provisioned ---
 if [ -f "$STATE_FILE" ]; then
     source "$STATE_FILE"
     if [ "$VPN_SET" = "true" ]; then
-        warn "FlightBridge already provisioned on this device."
-        warn "Device ID: $DEVICE_ID"
-        warn "To re-provision, delete $STATE_FILE and re-run."
+        warn "Already provisioned. Delete $STATE_FILE to re-provision."
         exit 0
     fi
 fi
 
-# --- Step 2: Get unique device ID from Pi serial ---
 log "Reading device serial number..."
 DEVICE_ID=$(cat /proc/cpuinfo | grep Serial | awk '{print $3}' | tail -c 9)
 if [ -z "$DEVICE_ID" ]; then
-    # Fallback for non-Pi hardware (dev/testing)
     DEVICE_ID=$(hostname)-$(date +%s)
     warn "Could not read Pi serial, using fallback ID: $DEVICE_ID"
 else
     success "Device ID: $DEVICE_ID"
 fi
 
-# --- Step 3: Call
+log "Requesting provisioning from backend..."
+RESPONSE=$(curl -sf -X POST "$BACKEND_URL/provision" \
+    -H "Content-Type: application/json" \
+    -d "{\"device_id\":\"$DEVICE_ID\",\"secret\":\"$PROVISIONING_SECRET\"}") || error "Backend unreachable at $BACKEND_URL"
 
+AUTH_KEY=$(echo "$RESPONSE" | grep -o '"auth_key":"[^"]*"' | cut -d'"' -f4)
+PAIRING_CODE=$(echo "$RESPONSE" | grep -o '"pairing_code":"[^"]*"' | cut -d'"' -f4)
+
+if [ -z "$AUTH_KEY" ]; then
+    error "Failed to get auth key from backend"
+fi
+success "Got auth key and pairing code: $PAIRING_CODE"
+
+log "Installing Tailscale..."
+curl -fsSL https://tailscale.com/install.sh | sh
+
+log "Connecting to Tailscale..."
+tailscale up --authkey="$AUTH_KEY" --hostname="uav-$DEVICE_ID" --accept-routes
+
+log "Getting Tailscale IP..."
+DRONE_IP=$(tailscale ip -4)
+if [ -z "$DRONE_IP" ]; then
+    error "Could not get Tailscale IP"
+fi
+success "Tailscale IP: $DRONE_IP"
+
+log "Registering with backend..."
+curl -sf -X POST "$BACKEND_URL/register" \
+    -H "Content-Type: application/json" \
+    -d "{\"device_id\":\"$DEVICE_ID\",\"drone_ip\":\"$DRONE_IP\",\"secret\":\"$PROVISIONING_SECRET\"}" || warn "Registration failed, pairing code may not resolve"
+
+cat > "$STATE_FILE" << STATE
+VPN_SET=true
+DEVICE_ID=$DEVICE_ID
+DRONE_IP=$DRONE_IP
+PAIRING_CODE=$PAIRING_CODE
+INSTALLED_AT=$(date '+%Y-%m-%d %H:%M:%S')
+STATE
+
+echo ""
+echo "================================================"
+success "FlightBridge provisioning complete!"
+echo ""
+echo "  Pairing Code : $PAIRING_CODE"
+echo "  Drone IP     : $DRONE_IP"
+echo "  Device ID    : $DEVICE_ID"
+echo ""
+echo "  Give the pairing code to your GCS operator."
+echo "================================================"
+echo ""
